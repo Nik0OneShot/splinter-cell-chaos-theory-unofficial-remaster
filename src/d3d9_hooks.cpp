@@ -49,17 +49,62 @@ namespace
 
     HRESULT STDMETHODCALLTYPE hkPresent(IDirect3DDevice9* d, const RECT* a, const RECT* b, HWND w, const RGNDATA* r)
     {
+        Plush::OnPresent(d);    // the Niko plush, when it wasn't drawn into the HDR scene this frame
+        Editor::OnPresent(d);   // the editor overlay goes into this frame
         const int64_t t = Perf::Begin();
         HRESULT hr = oPresent(d, a, b, w, r);
         Perf::AddPresent(t);
         Capture::OnPresent();
         ShaderPack::OnPresent();
+        Textures::OnPresent();
         return hr;
     }
-    HRESULT STDMETHODCALLTYPE hkSetRenderTarget(IDirect3DDevice9* d, DWORD i, IDirect3DSurface9* s) { Capture::OnSetRenderTarget(i, s); return oSetRenderTarget(d, i, s); }
-    HRESULT STDMETHODCALLTYPE hkClear(IDirect3DDevice9* d, DWORD n, const D3DRECT* r, DWORD f, D3DCOLOR c, float z, DWORD s) { Capture::OnClear(f, c); return oClear(d, n, r, f, c, z, s); }
+    HRESULT STDMETHODCALLTYPE hkSetRenderTarget(IDirect3DDevice9* d, DWORD i, IDirect3DSurface9* s)
+    {
+        Plush::OnSetRenderTarget(d, i, s);   // before the switch: the plush goes into the scene before post processing
+        Capture::OnSetRenderTarget(i, s);
+        return oSetRenderTarget(d, i, s);
+    }
+    using SetVSConstF_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*, UINT, const float*, UINT);
+    SetVSConstF_t oSetVertexShaderConstantF = nullptr;
+    HRESULT STDMETHODCALLTYPE hkSetVertexShaderConstantF(IDirect3DDevice9* d, UINT start, const float* data, UINT count)
+    {
+        Plush::OnSetVSConstants(d, start, data, count);   // finds the game's camera matrix (and draws the plush there)
+        return oSetVertexShaderConstantF(d, start, data, count);
+    }
+    HRESULT STDMETHODCALLTYPE hkClear(IDirect3DDevice9* d, DWORD n, const D3DRECT* r, DWORD f, D3DCOLOR c, float z, DWORD s)
+    {
+        Capture::OnClear(f, c);
+        Plush::OnBeforeClear(d, f);   // thermal: the plush goes in before its depth clear
+        const HRESULT hr = oClear(d, n, r, f, c, z, s);
+        Plush::OnClear(f);
+        return hr;
+    }
     HRESULT STDMETHODCALLTYPE hkSetRenderState(IDirect3DDevice9* d, D3DRENDERSTATETYPE s, DWORD v) { Capture::OnSetRenderState(s, v); return oSetRenderState(d, s, v); }
-    HRESULT STDMETHODCALLTYPE hkSetTexture(IDirect3DDevice9* d, DWORD s, IDirect3DBaseTexture9* t) { Capture::OnSetTexture(s, t); return oSetTexture(d, s, t); }
+    HRESULT STDMETHODCALLTYPE hkSetTexture(IDirect3DDevice9* d, DWORD s, IDirect3DBaseTexture9* t)
+    {
+        t = Textures::Substitute(t);   // texture packs: the mod's replacement instead of the game's texture
+        Capture::OnSetTexture(s, t);
+        return oSetTexture(d, s, t);
+    }
+    using StretchRect_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const RECT*,
+                                                      D3DTEXTUREFILTERTYPE);
+    StretchRect_t oStretchRect = nullptr;
+    HRESULT STDMETHODCALLTYPE hkStretchRect(IDirect3DDevice9* d, IDirect3DSurface9* s, const RECT* sr, IDirect3DSurface9* t, const RECT* tr,
+                                            D3DTEXTUREFILTERTYPE f)
+    {
+        Plush::OnStretchRect(d, s);   // goggles: the plush goes into the back buffer before their filter's copy of it
+        Capture::OnStretchRect(s, t);
+        return oStretchRect(d, s, sr, t, tr, f);
+    }
+    using UpdateTex_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9*);
+    UpdateTex_t oUpdateTexture = nullptr;
+    HRESULT STDMETHODCALLTYPE hkUpdateTexture(IDirect3DDevice9* d, IDirect3DBaseTexture9* src, IDirect3DBaseTexture9* dst)
+    {
+        const HRESULT hr = oUpdateTexture(d, src, dst);
+        if (SUCCEEDED(hr)) Textures::OnUpdateTexture(src, dst);
+        return hr;
+    }
     // [Debug] LogHudImages snapshot (F9): log each distinct draw call with the game code that issued it
     // (return addresses found on the stack) and, for UP draws, the first vertices' screen positions.
     int ScanReturnAddresses(void* esp, uint32_t (&ret)[10])
@@ -119,16 +164,17 @@ namespace
         LOG("%s", buf);
     }
 
-    HRESULT STDMETHODCALLTYPE hkDrawPrimitive(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, UINT s, UINT n) { if (Widescreen::SnapshotActive()) LogDraw("DP", n, nullptr, 0, _AddressOfReturnAddress()); Capture::OnDraw("DP", t, n); Perf::CountDraw(); return oDrawPrimitive(d, t, s, n); }
-    HRESULT STDMETHODCALLTYPE hkDrawIndexedPrimitive(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, INT b, UINT mi, UINT nv, UINT si, UINT pc) { if (Widescreen::SnapshotActive()) LogDraw("DIP", pc, nullptr, 0, _AddressOfReturnAddress()); Capture::OnDraw("DIP", t, pc); Perf::CountDraw(); return oDrawIndexedPrimitive(d, t, b, mi, nv, si, pc); }
-    HRESULT STDMETHODCALLTYPE hkDrawPrimitiveUP(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, UINT pc, const void* v, UINT st) { if (Widescreen::SnapshotActive()) LogDraw("DPUP", pc, v, st, _AddressOfReturnAddress()); Capture::OnDraw("DPUP", t, pc); Perf::CountDraw(); return oDrawPrimitiveUP(d, t, pc, v, st); }
-    HRESULT STDMETHODCALLTYPE hkDrawIndexedPrimitiveUP(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, UINT mi, UINT nv, UINT pc, const void* i, D3DFORMAT f, const void* v, UINT st) { if (Widescreen::SnapshotActive()) LogDraw("DIPUP", pc, v, st, _AddressOfReturnAddress()); Capture::OnDraw("DIPUP", t, pc); Perf::CountDraw(); return oDrawIndexedPrimitiveUP(d, t, mi, nv, pc, i, f, v, st); }
+    HRESULT STDMETHODCALLTYPE hkDrawPrimitive(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, UINT s, UINT n) { if (Widescreen::SnapshotActive()) LogDraw("DP", n, nullptr, 0, _AddressOfReturnAddress()); Capture::OnDraw("DP", t, n); Plush::OnDraw(d); Perf::CountDraw(); return oDrawPrimitive(d, t, s, n); }
+    HRESULT STDMETHODCALLTYPE hkDrawIndexedPrimitive(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, INT b, UINT mi, UINT nv, UINT si, UINT pc) { if (Widescreen::SnapshotActive()) LogDraw("DIP", pc, nullptr, 0, _AddressOfReturnAddress()); Capture::OnDraw("DIP", t, pc); Plush::OnDraw(d); Perf::CountDraw(); return oDrawIndexedPrimitive(d, t, b, mi, nv, si, pc); }
+    HRESULT STDMETHODCALLTYPE hkDrawPrimitiveUP(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, UINT pc, const void* v, UINT st) { if (Widescreen::SnapshotActive()) LogDraw("DPUP", pc, v, st, _AddressOfReturnAddress()); Capture::OnDraw("DPUP", t, pc); Plush::OnDraw(d); Perf::CountDraw(); return oDrawPrimitiveUP(d, t, pc, v, st); }
+    HRESULT STDMETHODCALLTYPE hkDrawIndexedPrimitiveUP(IDirect3DDevice9* d, D3DPRIMITIVETYPE t, UINT mi, UINT nv, UINT pc, const void* i, D3DFORMAT f, const void* v, UINT st) { if (Widescreen::SnapshotActive()) LogDraw("DIPUP", pc, v, st, _AddressOfReturnAddress()); Capture::OnDraw("DIPUP", t, pc); Plush::OnDraw(d); Perf::CountDraw(); return oDrawIndexedPrimitiveUP(d, t, mi, nv, pc, i, f, v, st); }
     HRESULT STDMETHODCALLTYPE hkSetFVF(IDirect3DDevice9* d, DWORD f) { Capture::OnSetFVF(f); return oSetFVF(d, f); }
     HRESULT STDMETHODCALLTYPE hkCreateVertexShader(IDirect3DDevice9* d, const DWORD* fn, IDirect3DVertexShader9** out)
     {
         Perf::CountShader();
         HRESULT hr = oCreateVertexShader(d, fn, out);
         if (SUCCEEDED(hr) && out) Capture::OnShaderCreated(*out, fn);
+        if (SUCCEEDED(hr) && out) Plush::OnCreateVertexShader(*out, fn);   // thermal's scene shaders
         return hr;
     }
     // Profiler-only hooks.
@@ -163,7 +209,12 @@ namespace
         return hr;
     }
 
-    HRESULT STDMETHODCALLTYPE hkSetVertexShader(IDirect3DDevice9* d, IDirect3DVertexShader9* s) { Capture::OnSetVertexShader(s); return oSetVertexShader(d, s); }
+    HRESULT STDMETHODCALLTYPE hkSetVertexShader(IDirect3DDevice9* d, IDirect3DVertexShader9* s)
+    {
+        Capture::OnSetVertexShader(s);
+        Plush::OnSetVertexShader(s);
+        return oSetVertexShader(d, s);
+    }
 
     using GetAdapterIdentifier_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*, UINT, DWORD, D3DADAPTER_IDENTIFIER9*);
     using CreateDevice_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3D9*, UINT, D3DDEVTYPE, HWND, DWORD, D3DPRESENT_PARAMETERS*, IDirect3DDevice9**);
@@ -291,7 +342,11 @@ namespace
     {
         ApplyPresentOverrides(pp, 0);
         LogPresent("Reset", pp);
-        return oReset(dev, pp);
+        Editor::OnReset(true);
+        Plush::OnReset(true);
+        const HRESULT hr = oReset(dev, pp);
+        if (SUCCEEDED(hr)) { Editor::OnReset(false); Plush::OnReset(false); }
+        return hr;
     }
 
     HRESULT STDMETHODCALLTYPE hkCreateTexture(IDirect3DDevice9* dev, UINT w, UINT h, UINT levels, DWORD usage, D3DFORMAT fmt,
@@ -299,6 +354,8 @@ namespace
     {
         Perf::CountCreate();
         HRESULT hr = oCreateTexture(dev, w, h, levels, usage, fmt, pool, tex, shared);
+        if (SUCCEEDED(hr) && tex && *tex)
+            Textures::OnCreateTexture(*tex);
         if (g_settings.logRenderTargets && (usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
         {
             const char* n = FormatName(fmt);
@@ -327,6 +384,7 @@ namespace
             if (SUCCEEDED(hr))
             {
                 AmdFix::OnCreated(out ? *out : nullptr, kind);
+                if (out) Plush::OnCreatePixelShader(*out, fn);
                 if (out) Capture::OnShaderCreated(*out, repl);
                 return hr;
             }
@@ -336,6 +394,7 @@ namespace
         if (SUCCEEDED(hr) && out)
         {
             Capture::OnShaderCreated(*out, fn);
+            Plush::OnCreatePixelShader(*out, fn);   // thermal's filter (its palette)
             ShaderPack::OnCreated(dev, fn, *out, oCreatePixelShader);
         }
         if (g_settings.logShaders && fn)
@@ -354,6 +413,7 @@ namespace
         HRESULT hr = oSetPixelShader(dev, ShaderPack::Swap(shader));
         AmdFix::OnSetPixelShader(dev, shader);
         Capture::OnSetPixelShader(shader);
+        Plush::OnSetPixelShader(shader);
         return hr;
     }
 
@@ -369,6 +429,10 @@ namespace
     {
         ApplyPresentOverrides(pp, adapter);
         LogPresent("CreateDevice", pp);
+        // The game makes a new device per map change: the editor overlay must let go of the old one first, or its
+        // references keep the old device (and its swap chain on the same window) alive.
+        Editor::OnNewDevice();
+        Plush::OnNewDevice();
         HRESULT hr = oCreateDevice(self, adapter, type, focus, flags, pp, out);
         LOG("D3D9: CreateDevice -> 0x%08X", unsigned(hr));
         if (SUCCEEDED(hr) && out && *out)
@@ -419,14 +483,25 @@ void D3D9Hooks::OnDevice(IDirect3DDevice9* dev)
         HOOK(32, hkGetRenderTargetData, oGetRenderTargetData);
         HOOK(118, hkCreateQuery, oCreateQuery);
     }
-    if (g_settings.captureKey > 0 || g_settings.logShaderInputs)
-    {
-        HOOK(kDev_SetRenderTarget, hkSetRenderTarget, oSetRenderTarget);
-        HOOK(kDev_Clear, hkClear, oClear);
-        HOOK(kDev_SetRenderState, hkSetRenderState, oSetRenderState);
+    const bool capture = g_settings.captureKey > 0 || g_settings.logShaderInputs;
+    if (capture || Textures::Active())
         HOOK(kDev_SetTexture, hkSetTexture, oSetTexture);
+    if (Textures::Active())
+        HOOK(31, hkUpdateTexture, oUpdateTexture);   // IDirect3DDevice9::UpdateTexture
+    if (capture || Plush::Available())
+        HOOK(kDev_SetRenderTarget, hkSetRenderTarget, oSetRenderTarget);
+    if (Plush::Available())
+        HOOK(94, hkSetVertexShaderConstantF, oSetVertexShaderConstantF);   // IDirect3DDevice9::SetVertexShaderConstantF
+    if (capture || Plush::Available())
+        HOOK(kDev_Clear, hkClear, oClear);
+    if (capture || Plush::Available())
+        HOOK(34, hkStretchRect, oStretchRect);   // IDirect3DDevice9::StretchRect
+    if (capture || Plush::Available())
+        HOOK(kDev_SetVertexShader, hkSetVertexShader, oSetVertexShader);   // (the plush: thermal's scene shaders)
+    if (capture)
+    {
+        HOOK(kDev_SetRenderState, hkSetRenderState, oSetRenderState);
         HOOK(kDev_SetFVF, hkSetFVF, oSetFVF);
-        HOOK(kDev_SetVertexShader, hkSetVertexShader, oSetVertexShader);
         LOG("D3D9: frame capture armed (key 0x%X)", g_settings.captureKey);
     }
 #undef HOOK

@@ -730,6 +730,7 @@ namespace
         LOG("Difficulty: loading '%ls' with options '%ls'; level's own URL '%ls' options '%ls'", loadMap, loadOpts.c_str(),
             levelMap, levelOpts.c_str());
         Clusterfuck::OnMapLoad(loadMap, loadOpts.c_str());
+        Scripting::OnMapLoad(loadMap, loadOpts.c_str());
         // A save loads without MISSIONDIFF: restore the difficulty its mission was started with.
         if (g_settings.fixSoloDifficulty && UrlInt(loadOpts, L"MISSIONDIFF") < 0)
         {

@@ -1,5 +1,261 @@
 # Changelog
 
+## 1.0.0-dev.142
+(dev.122 to dev.142)
+- **The CLUSTERFUCK award.** Beat CLUSTERFUCK and you take a little something into every mission after that, at any
+  difficulty. What it is, you'll have to find out. It works in normal vision and with every goggle mode (night
+  vision, thermal, electromagnetic), lit by the light where it is.
+- **F10 frame captures** list the game's copies of the screen (StretchRect), mark the back buffer (BB) and end with
+  the bytecode of every shader the frame used.
+
+## 1.0.0-dev.121
+- **CLUSTERFUCK victory: "YOU ACTUALLY DID IT!"** Beating the whole game on CLUSTERFUCK now counts for something.
+  - The mod spots each won mission: the level's `EndMission(true)` sets the mission manager's status
+    (`EMissionManager.m_eMissionStatus`, `EPlayerController.MISSION` +5C0h, +B4h = 1) while Sam is alive. Each won
+    mission is stored in the campaign (`Won <map> = time and the mission's stats`) and gets a "MISSION SURVIVED" banner
+    with a chime (`CLUSTERFUCK - 4 / 11 - Penthouse`). A death after the mission is won doesn't count.
+  - Winning Kokubo Sosho in a campaign that played all 11 solo missions in one life is beating the game: a
+    full-screen ceremony over the final fade-out (a white flash, the title slamming in with a rainbow shimmer, a
+    sunburst, confetti cannons and rain, fireworks, an original synthesised fanfare, a swinging medal: the Order of
+    the Clusterfuck), then the stats, a rank (THE GHOST OF THE CLUSTERFUCK for no kills, THE SANDMAN for knockouts,
+    THE ONE-MAN CLUSTERFUCK for 200 kills...) and badges (FLAWLESS on the first life, STUBBORN after 10, PACIFIST,
+    MERCIFUL, PHANTOM, JANITOR, SPEED DEMON, MARATHON...). Enter ends it. If it isn't seen to the end, it plays again
+    at the next main menu.
+  - A certificate, `YOU ACTUALLY DID IT - CLUSTERFUCK <id>.txt`, goes in the save folder (next to where the REST IN
+    PEACE notes go) and on the desktop (`[Gameplay] ClusterfuckCertificateOnDesktop`, on): big block letters, the
+    medal, what they lived through, the campaign's dates and how many lives it took (every earlier campaign that
+    died), a table of every mission's time, kills, knockouts, injuries, bodies found and times spotted, the badges
+    and a "seal of authenticity".
+  - The difficulty menu shows a star after CLUSTERFUCK for every time it was beaten (up to five).
+  - Winning Kokubo Sosho in a campaign that started later says so (no medal); winning it again in a campaign that
+    already won says "YOU DID IT. AGAIN." A Sam who dies after his campaign's victory still loses its saves, but the
+    campaign keeps its victory.
+  - The level editor's Tools tab has "Preview the victory ceremony" (a sample campaign and
+    `System\YOU ACTUALLY DID IT - PREVIEW.txt`; "Watch your victory again" once there is one) and "Preview a mission
+    toast".
+  - The editor's overlay now also draws while the editor is closed, for the ceremony and the banners.
+
+## 1.0.0-dev.120
+- **Level editor, step 3: saving.** Ctrl+S (or Save in the Tools tab) writes the edits as a level file,
+  `Mods\<folder>\Levels\<map>.txt`, for the mod folder named in the Tools tab (`[Editor] SaveFolder`, MyLevel at
+  first; a new folder gets a `mod.ini` and counts at once, no restart).
+  - Every edit is remembered with the value it set, the engine's own text for it at that moment, so a placed guard is
+    saved where he was put even if he walks off afterwards.
+  - The level-change applier now reports what each file did (its blocks and the actors they made or changed), so when
+    the mission started with that file applied, saving keeps the file's blocks and merges the edits into them (moved
+    actors get their new Location, deleted ones drop out, changes to a deleted map actor become `Delete`), then adds
+    the editor's own copies (`Begin Actor Copy=` the map actor it all started from, with every property set along the
+    way: a file makes its copies before setting properties, so copying a copy wouldn't carry them), changes
+    (`Begin Change`) and deletions. Saving again doesn't duplicate anything.
+  - After a savegame the files aren't applied, so the editor asks before replacing an existing file.
+  - Changes to things made while playing (a guard's weapon, effects) have no fixed name and aren't saved; the status
+    line says so.
+- **Deleting takes along what the actor carries:** a guard's gun, flashlight and gear (actors it owns or that are
+  attached to it, and theirs) go with him, in the editor and in level files' `Delete`. Characters and controllers are
+  never taken along (Sam standing on a deleted crate stays), and an actor the game won't destroy is hidden; a hidden
+  character also loses its AI. Sam can't be deleted.
+- **Copies no longer share the original's native handles:** `copyprops` skipped engine bookkeeping but still copied
+  `HavokRigidBody`, `HavokPhantom` (the Havok body and phantom the game makes per character), `m_hLipSynchData`,
+  `DynOccId`, `impactID` and `nInRainCount`. Copied guards that were killed didn't fall like ragdolls; this is the
+  likely cause. To check, the log now lists what differs between the first copy of each class and its original
+  (`[LUA] Level editor:` lines), and the physics state when a copy or its original dies (and 1.5 s later).
+- **Freeze the world** checkbox in the Tools tab (saved as `[Editor] EditorPause`).
+- **Duplicates no longer stand in the bind pose** while the world is frozen: duplicating a character lets the world run
+  for 0.2 s so it takes its pose.
+
+## 1.0.0-dev.119
+- **Level editor, step 2: free camera, picking, moving, duplicating, deleting.**
+  - **Free camera** while the editor is open: hold the right mouse button to look, WASD to fly, Q/E down/up, Shift
+    four times faster, the mouse wheel over the world changes the speed (Tools: fly and look speed). It replaces the
+    view the engine asks the player controller for every frame (the script event `PlayerCalcView`, through a detour
+    of `UObject::ProcessEvent`), so it works with the world frozen and leaves Sam alone; it starts where the game's
+    camera was and hands back when the editor closes.
+  - **Click to select:** a ray through the cursor (the widescreen Hor+ field of view); `Actor.Trace` finds what it hits
+    with collision, and visible actors without collision are picked within their collision radius. The selection gets
+    a box, its axes (red X, green Y, blue Z) and its name. **Drag** the selected actor to move it in the plane facing
+    the camera (Shift: only up/down), through `SetLocation`; **Snap to grid** rounds it. **F** flies the camera to it.
+  - **Duplicate** (Ctrl+D) makes a copy beside it (the same copy as level files' `Copy=`: guards get their body, AI
+    and controller), **Delete** (Del) destroys it (or hides it and removes its collision if the game won't). The
+    Actors list is sorted from the camera; double-click focuses.
+  - **Show actor names** labels the nearest 150 actors within 30 m. **UI size** slider (saved as `[Editor] UIScale`);
+    the default is larger (screen height / 900).
+  - Changes are counted for saving, which is the next step.
+- Lua: the copy behind `Begin Actor Copy=` is now one function shared with the editor.
+
+## 1.0.0-dev.118
+- **Level editor: leaving a level after using it no longer gets stuck on the loading screen.** The game makes a new
+  graphics device for every map change, and the editor overlay (Dear ImGui's DX9 backend) held a reference to the old
+  one plus textures and buffers on it, so the old device and its swap chain on the same window stayed alive: presents
+  slowed to about 30 fps and the menu never appeared. The overlay now lets go as soon as the game starts creating the
+  new device (CreateDevice hook) and reconnects the next time it's opened; the selection is cleared on a map change.
+
+## 1.0.0-dev.117
+- **In-game level editor, step 1: the overlay** (`[Editor] EditorKey` 0xC0, the ~ key, which the game leaves unbound).
+  - Opening it freezes the world (`LevelInfo.Pauser`, `EditorPause` 1), drops every game input event (in
+    `CauseInputEvent`), gives the raw mouse to the editor's own cursor and the keyboard to its text fields.
+  - **Actors** lists every actor of the level, nearest to Sam first, filterable by name or class.
+  - **Inspector** shows every property of the selected actor, grouped by the class declaring it, in UnrealEd's text
+    syntax (the engine's own `ExportText`), and edits it (Enter applies, through `ImportText`; Location, Rotation,
+    DrawScale, StaticMesh, collision and the like through the game's own functions). Engine internals are hidden
+    and read-only. Edits are live only for now: saving to a level file is the next step.
+  - **Tools** reloads Lua scripts, switches texture dumping on and off and writes the actor list.
+  - Drawn with Dear ImGui (MIT, `third_party/imgui`) just before each Present; it scales with the screen height.
+- **The Ctrl+F8 / F9 / F11 shortcuts are off by default** (`LevelDumpKey`, `DumpTexturesKey`, `ReloadScriptsKey` 0):
+  the game binds F8 to QuickLoad, F9 to Screenshot and F11 to Brightness, so Ctrl+F8 could quickload. The editor's
+  Tools tab does all three.
+
+## 1.0.0-dev.116
+- **Level changes: copied guards fall when knocked out or killed.** dev.115's copies shot (and hit) Sam without
+  crashing, but one knocked out froze standing: characters fall as Havok ragdolls, and their Havok shape is made natively
+  at level start (`EPawn.CreateHavokShape`, never called from script). A copy now makes its own.
+- LEVELS.txt: `EGameplayObject` is the game's breakable-object class (a guard shot the test barrel away); props that
+  should stay need `bDamageable=False`.
+
+## 1.0.0-dev.115
+- **Level changes: copied guards can shoot.** dev.114's copies animated and fought, but the game crashed on their first
+  shot: the gunfire is announced to the shooter's AI zone (0x10BE0150 reads the pawn's zone at +428h), and the copy had
+  none, because the copy only kept links to bStatic/bNoDelete actors and AI zones are neither. Links are now kept to any
+  actor loaded with the map (it has a linker, UObject +10h) and still dropped for actors spawned while playing.
+
+## 1.0.0-dev.114
+- **Level changes: copied guards animate and don't crash when they spot Sam.** dev.113's copies were visible and their
+  AI reacted, but they T-posed and the game crashed as one spotted Sam: the pawn reads its controller's
+  `EnemyInfo[iEnemy]` (0x1094C5D0), and the enemy list is only filled for the map's controllers at level start, so
+  the copy's was empty. A copy's controller now gets `EnemyInfo` and its indexes from the original's controller, and
+  the copy relinks its animations to its body (`LinkNPCAnims`, `SetupSkelMesh`), which it didn't have when it spawned.
+- Lua: `copyprop(dst, src, name)` deep-copies one property.
+
+## 1.0.0-dev.113
+- **Level changes: copied guards no longer break (and the game no longer crashes leaving the level).** dev.112's copy
+  also copied the engine's own object bookkeeping, which Object.uc exposes as properties (ObjectInternal with the
+  object's index and hash links, Outer, ObjectFlags), so the copies looked destroyed (`the object no longer exists`),
+  stood around as invisible collision, and the game crashed cleaning up the level. The copy now skips everything in
+  UObject (below +28h) and every property flagged native (400h), 800h or 400000h (XLevel, Level, Region, Touching, ...).
+- A copied character whose original had its body streamed out (far from Sam) gets the body from `BackupMesh`.
+
+## 1.0.0-dev.112
+- **Level changes: copying actors (`Begin Actor Copy=<name>`)**, the way to add guards. dev.111's added guards were
+  invisible and without AI: a map's guards get their body (`Mesh`/`BackupMesh`, streamed in near the player), AI pattern,
+  zones, behaviour and weapons from properties set in the editor, and the engine only gives pawns a controller during
+  level startup (`Pawn.PostBeginPlay` checks `Level.bStartup`). A copy spawns the original's class, copies every
+  designer-set property with the engine's deep copy (`UProperty::CopyCompleteValue`) except position, tag, runtime
+  state and links to runtime actors (only references to fixed map actors such as AI zones are kept), and gives a copied
+  character a controller of the same class as the original's.
+- Lua: `copyprops(dst, src)`.
+- Note: a character's `DrawScale` changes its value but not its look in this game; scaling works on props.
+
+## 1.0.0-dev.111
+- **Level changes** (mod support, phase 5; `[Mods] LevelChanges` 1). Documented for modders in `Mods\LEVELS.txt`:
+  - `Mods\<mod>\Levels\<map>.txt` adds actors (`Begin Actor Class=... End Actor`), changes actors already in the map
+    (`Begin Change Name=... End Change`) and removes them (`Delete Name=...`). Applied every time the mission starts
+    (a URL with MISSIONDIFF, so Retry too), not when a savegame loads, since the save already has them.
+  - Properties use UnrealEd's text syntax and the engine's own parser (UProperty::ImportText, vtable +8Ch), so any
+    property works, objects by their full name included. Location, Rotation, StaticMesh, DrawType, DrawScale(3D),
+    Physics, the collision flags and size go through the game's functions (SetLocation, SetStaticMesh, SetCollision,
+    ...). `@Label` points at an actor added in the same file. An actor the game won't destroy is hidden and loses its
+    collision instead.
+  - Every line that doesn't work is logged with its line number and the reason; the log sums up each map's changes.
+  - **Ctrl+F8** (`LevelDumpKey`) lists every actor of the current level (name, class, location, tag, static mesh) in
+    `Mods\_LevelDump\<map>.txt`.
+- Lua: `actor(name)` finds a level's actor by name, and `importtext(obj, property, text [, index])` sets a property
+  from text syntax.
+
+## 1.0.0-dev.110
+- **Texture dumps: more of them get the game's texture name.** dev.109 captured the textures (835 dumped from the menu
+  and Lighthouse), but only the loading screens were named: the uploader (0x10C8CAF0) receives the texture's render
+  interface, which sits inside the engine texture object rather than at its start. The name search now also looks a
+  little before such an interface for the texture object.
+- **Dumping is incremental:** textures already in `Mods\_TextureDump` from an earlier session aren't written again; a
+  fingerprint-only file is renamed when the game's name is found this time.
+
+## 1.0.0-dev.109
+- **Texture packs: level textures are captured.** The renderer fills most textures with IDirect3DTexture9::LockRect
+  on each mip level (passing the full rectangle) and only a few through a level's surface; dev.107 only watched the
+  surfaces, so a mission's textures were missed. Both ways are hooked now, and a lock with a rectangle covering the
+  whole level counts as a full upload.
+
+## 1.0.0-dev.108
+- **Texture dumping saves what's already loaded:** switching dumping on (Ctrl+F9) now also saves every texture that's
+  already in memory, read back from the texture (these files have only the fingerprint as their name; textures the
+  game loads while dumping is on also get the game's own name).
+- The log notes the first texture dumped and any file or folder it couldn't write, and textures whose format can't be
+  saved.
+
+## 1.0.0-dev.107
+- **Texture packs: textures are actually captured.** The renderer never locks a texture itself: it takes the mip level
+  as a surface (GetSurfaceLevel) and locks that, so dev.106 saw no uploads and dumped nothing. The surface's
+  LockRect/UnlockRect are hooked now, and a lock of a texture's top-level surface is fingerprinted.
+- The log counts texture uploads seen, replaced and dumped (`[TEX]`, every few seconds while it changes).
+
+## 1.0.0-dev.106
+- **Texture packs** (mod support, phase 2; `[Mods] TexturePacks` 1). Documented for modders in `Mods\TEXTURES.txt`:
+  - **Dumping:** Ctrl+F9 (`DumpTexturesKey`) or `DumpTextures = 1` saves every texture the game loads to
+    `Mods\_TextureDump\` as PNG (or DDS with `DumpFormat = dds`), once each, named
+    `<game's texture name>__<fingerprint>.png`. The game's name is found by looking for the engine texture being
+    uploaded and is only there to help find things.
+  - **Replacing:** any image in a mod's `Textures\` folder (subfolders too) whose name ends in a texture's 16-digit
+    fingerprint replaces it, at any resolution. PNG, TGA, JPG and BMP are compressed to DXT when the original was
+    compressed and get a full mip chain; DDS (DXT1/3/5 or uncompressed, with or without mipmaps) is used as saved.
+    The higher-priority mod wins when two replace the same texture.
+  - How: a texture's fingerprint is a hash of its top mip level as the game uploads it (pixels, size, format), taken
+    when it's unlocked; textures with a replacement are swapped for it in SetTexture (and through
+    UpdateTexture), and the replacement is freed with its last user. Textures that change all the time are left alone.
+- stb_image, stb_image_write and stb_dxt (MIT / public domain) are compiled in (`third_party/stb`). The package adds
+  `Mods\TEXTURES.txt`.
+
+## 1.0.0-dev.105
+- **Lua: calling game functions with parameters works** (the test mod's K key killed Sam or crashed the game). This
+  engine flags function parameters differently from stock Unreal Engine 2 (parameter 20h, out 40h, return value 100h
+  instead of 80h, 100h, 400h, read from Engine.u and Core.u), so no parameters were found: `SetLocation` was called
+  without its new location and moved Sam to a garbage position. A function whose parameters don't add up to its
+  parameter size is now refused with an error instead of being called.
+- **One-letter names are read correctly** (the log showed `X&Name:`): the engine's name table is 8-bit text, which
+  was misread as 16-bit for names one character long. This affected the Lua dump and log lines naming such fields.
+
+## 1.0.0-dev.104
+- **Lua: vectors work.** `sam.Location.X` was nil, so vector maths failed (the L key of the test mod). Vector fields
+  are now always `X`, `Y`, `Z` and rotator fields `Pitch`, `Yaw`, `Roll`; other structs' fields can be read and written
+  in any case, and engine class names are compared without case. (The cause turned out to be one-letter names being
+  misread, fixed in dev.105.)
+- **Lua: a handler is only switched off after 10 failures in a row.** An error in one branch (a key press) no longer
+  disables the whole handler, which is why the test mod's J key stopped working until a reload.
+
+## 1.0.0-dev.103
+- **Lua scripting** (mod support, phase 3; `[Mods] Scripts` 1). Every enabled mod's `Scripts\*.lua` files run in Lua
+  5.4 when the game starts, in mod load order. Documented for modders in `Mods\SCRIPTING.txt`:
+  - Events `map`, `level` (the level is ready, after every map load, savegame load and reload) and `tick`; timers
+    `after`, `every`, `cancel`, and coroutines with `run`/`wait`.
+  - `player()`, `level()`, `map()`, `time()`, `actors(class)`, `objects(class)`, `class(name)`.
+  - Objects read and write any UnrealScript property by name (`sam.Health = 50`):
+    numbers, bools, names, strings, objects (class-checked), structs as tables, static arrays as lists, dynamic
+    arrays read-only. Their UnrealScript functions are methods (`obj:Function(...)`), script or native; out
+    parameters come back as extra results. `valid`, `isa`, `nameof`, `classof`, `fullname`, and `dump(obj, filter)`
+    to log an object's properties and functions.
+  - `key(name)` / `pressed(name)`, `vec(x, y, z)` with vector maths, `print` (to the log), `require`, `shared`.
+  - Each mod has its own globals. The sandbox has no io, os.execute, debug library, dofile/loadfile or compiled
+    chunks; a call running over a second is stopped, a handler failing 10 times in a row is switched off, and using a
+    destroyed object is an error rather than a crash. Ctrl+F11 (`ReloadScriptsKey`) reloads every script.
+  - Engine side: property and function layouts come from the engine's own reflection (FindField, the property
+    classes, UProperty::Serialize, ProcessEvent); script functions are called through ProcessEvent, natives with
+    their arguments as bytecode constants or local variables.
+- Lua 5.4.9 (MIT) is compiled into `d3d9.dll` (`third_party/lua`). The package adds `Mods\SCRIPTING.txt` and an
+  example script in `Mods\_Example\Scripts`.
+
+## 1.0.0-dev.102
+- **Mods folder** (mod support, phase 1; `[Mods] Mods` 1). Every folder in the new `Mods\` folder next to `System\` and
+  `Data\` is a mod. Its `System\` and `Data\` folders mirror the game's: a file with the same path as a game file
+  replaces it whenever the game (or Bink, for videos) opens it, and a file the game doesn't have is added to the
+  game's folder listings, so a new package in `Data\Maps` or `Data\StaticMeshes` is found like a shipped one. The
+  game's own files are never touched.
+  - `mod.ini` (optional): `Name`, `Author`, `Version`, `Description`, `Enabled`, `Priority`. When two mods replace
+    the same file, the higher priority wins. Folders starting with `_` are ignored.
+  - `.ini`, `.log`, `.exe`, `.dll` and `.asi` files can't be replaced (the ini files hold the player's settings).
+  - The log lists the loaded mods with how many files each replaces and adds, and (`LogModFiles` 1) each file a mod
+    provides the first time the game opens it (`[MODS]`).
+  - Without any mod files nothing is hooked. With them, only read-only opens of files a mod provides are redirected,
+    and only listings of folders a mod has files in are rebuilt.
+  - The package now includes `Mods\README.txt` and an example mod, `Mods\_Example`.
+
 ## 1.0.0-dev.101
 - **CLUSTERFUCK now shows in the difficulty menu.** The row was added in dev.100, but the list only draws as many
   rows as its page allows (3), so it sat out of sight below EXPERT. The list now shows 4.

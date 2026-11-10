@@ -1612,6 +1612,18 @@ namespace
     }
 }
 
+// The engine's light level at a point (Sam's light-meter scale), from the level lights in range: used to shade the
+// Niko plush. Sam is the cache actor (his traces and cache are left as they were).
+bool Perception::LightAt(void* sam, const float point[3], float& out)
+{
+    if (!sam) return false;
+    void* level = At<void*>(sam, 0x7C);
+    if (!level) return false;
+    RefreshLevelLights(level);
+    int used = 0;
+    return BackgroundLuminosity(level, sam, Vec{ point[0], point[1], point[2] }, out, used);
+}
+
 void Perception::OnPlayerTick(void* pawn)
 {
     if (!g_log || !pawn) return;

@@ -367,6 +367,7 @@ namespace
             Scripted::OnPlayerTick(actor);
             Clusterfuck::OnPlayerTick(actor);
             Movement::OnPlayerTick(actor);
+            Scripting::OnPlayerTick(actor, dt);
             return r;
         }
         if (cls == kOptic)

@@ -175,6 +175,7 @@ namespace
 
     int __fastcall hkViewportWndProc(void* vp, void* edx, UINT msg, WPARAM wp, LPARAM lp)
     {
+        if (Editor::WndProc(msg, wp, lp)) return 0;   // the level editor is open: keys and the mouse are its
         // The press that skipped a video must not also act on the next screen.
         if (g_suppressInputUntil && ((msg >= WM_KEYFIRST && msg <= WM_KEYLAST) || (msg >= WM_LBUTTONDOWN && msg <= WM_XBUTTONDBLCLK)))
         {

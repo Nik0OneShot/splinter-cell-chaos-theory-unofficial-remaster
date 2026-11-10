@@ -235,6 +235,7 @@ namespace
     int __fastcall hkCauseInputEvent(void* viewport, void* edx, int key, int action, float delta)
     {
         g_viewport = viewport;
+        if (Editor::IsOpen() && !g_injecting) return 1;   // the level editor is open: the game gets no input
         if (g_active && !g_injecting && action == kIST_Axis && (key == kIK_MouseX || key == kIK_MouseY))
         {
             // Vanilla WM_MOUSEMOVE delta (Windows cursor pixels): kept for the menu cursor only.
@@ -252,7 +253,9 @@ namespace
             const long long dx = g_dx.exchange(0);
             const long long dy = g_dy.exchange(0);
             g_sysDx = g_sysDy = 0.0f;   // vanilla (warped) deltas: not used while raw input is on
-            if (Captured(vp))
+            if (Editor::IsOpen())
+                Editor::AddMouseDelta(float(dx) * PointerSpeed(), float(dy) * PointerSpeed());   // the editor's own cursor
+            else if (Captured(vp))
             {
                 // in-game cursors (hacking, keypads...): raw counts as desktop pixels, not the warped vanilla deltas
                 const float scale = MenuScale() * PointerSpeed();

@@ -18,6 +18,26 @@ add_library(minhook STATIC
 )
 target_include_directories(minhook PUBLIC third_party/minhook/include)
 
+# Lua 5.4, compiled as C++ so script errors unwind with C++ exceptions instead of longjmp.
+file(GLOB LUA_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua/src/*.c")
+add_library(lua STATIC ${LUA_SOURCES})
+set_source_files_properties(${LUA_SOURCES} PROPERTIES LANGUAGE CXX)
+target_include_directories(lua PUBLIC third_party/lua/src)
+target_compile_options(lua PRIVATE /W0 /EHsc /TP)
+
+# Dear ImGui (level editor overlay): core + DX9 and Win32 backends.
+add_library(imgui STATIC
+    third_party/imgui/imgui.cpp
+    third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp
+    third_party/imgui/imgui_widgets.cpp
+    third_party/imgui/backends/imgui_impl_dx9.cpp
+    third_party/imgui/backends/imgui_impl_win32.cpp
+)
+target_include_directories(imgui PUBLIC third_party/imgui)
+target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_DEMO_WINDOWS UNICODE _UNICODE)
+target_compile_options(imgui PRIVATE /W0 /EHsc)
+
 add_library(d3d9 SHARED
     src/dllmain.cpp
     src/log.cpp
@@ -47,11 +67,18 @@ add_library(d3d9 SHARED
     src/aim.cpp
     src/scripted.cpp
     src/clusterfuck.cpp
+    src/mods.cpp
+    src/scripting.cpp
+    src/textures.cpp
+    src/editor.cpp
+    src/victory.cpp
+    src/plush.cpp
     src/exports.def
     src/version.rc
 )
 target_precompile_headers(d3d9 PRIVATE src/pch.h)
-target_link_libraries(d3d9 PRIVATE minhook winmm user32 ole32)
+target_include_directories(d3d9 PRIVATE third_party/stb)
+target_link_libraries(d3d9 PRIVATE minhook lua imgui winmm user32 ole32 shell32)
 target_compile_definitions(d3d9 PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
 target_compile_options(d3d9 PRIVATE /W3 /EHsc /permissive- /Zc:threadSafeInit- /MP)
 

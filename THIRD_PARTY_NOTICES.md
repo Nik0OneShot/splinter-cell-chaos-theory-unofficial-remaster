@@ -20,6 +20,26 @@ substantial portions of the Software.
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
 ```
 
+### Lua 5.4 – MIT License
+Copyright (C) 1994-2026 Lua.org, PUC-Rio. Unmodified library sources of Lua 5.4.9 in `third_party/lua/src`, compiled
+into `d3d9.dll` for mod scripting. Full text: `third_party/lua/LICENSE.txt`. https://www.lua.org
+
+### The CLUSTERFUCK award's model – Sketchfab Standard License
+A 3D model by Pitzuna (https://sketchfab.com/bonkiobonkio), used under the Sketchfab Standard License. Not in the
+repository: release packages carry it converted into `System/SCCTRemaster_Award.pak` (built by
+`tools/pack_plush.py`), used only by the mod. It's a fan tribute to a character that belongs to its creators, and
+isn't affiliated with them.
+
+### stb – MIT License (or public domain)
+`stb_image.h` 2.30, `stb_image_write.h` 1.16 and `stb_dxt.h` 1.12 by Sean Barrett, unmodified, in `third_party/stb`;
+compiled into `d3d9.dll` for texture packs (reading and writing images, DXT compression). Full text:
+`third_party/stb/LICENSE.txt`. https://github.com/nothings/stb
+
+### Dear ImGui – MIT License
+Copyright (c) 2014-2026 Omar Cornut. Dear ImGui 1.92.9b (core and the DX9/Win32 backends, unmodified) in
+`third_party/imgui`, compiled into `d3d9.dll` for the in-game level editor. Full text: `third_party/imgui/LICENSE.txt`.
+https://github.com/ocornut/imgui
+
 ### MinHook – BSD 2-Clause License
 Copyright (C) 2009-2017 Tsuda Kageyu. Full text: `third_party/minhook/LICENSE.txt`.
 https://github.com/TsudaKageyu/minhook

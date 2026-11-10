@@ -12,8 +12,16 @@
 // recorded under it (the savegame CreateFileW hook in guards.cpp reports writes and the save a map load reads).
 // Loading a save makes its campaign active again (or none); a mission that follows another (MISSIONDIFF in the
 // load URL, no pending choice) keeps the active one; a new game picked with Normal/Hard/Expert ends it.
+//
+// Victory: every mission a campaign wins (EMissionManager.m_eMissionStatus 1, set by EPlayerController.EndMission
+// when the level's pattern calls EndMission(true) with Sam alive) is recorded with its time and stats. Winning
+// 11_KokuboSosho in a campaign that played all 11 solo missions is beating the game: "YOU ACTUALLY DID IT!" (the
+// ceremony in victory.cpp), a certificate .txt in the save folder (and on the desktop), and a star after
+// CLUSTERFUCK in the difficulty menu for every victory.
 #include "pch.h"
 #include "features.h"
+#include "victory_text.h"
+#include <shlobj.h>
 
 extern HMODULE g_self;
 
@@ -33,6 +41,7 @@ namespace
     std::wstring g_active;   // the active campaign's ID ("" = not a CLUSTERFUCK game)
     std::wstring g_store;    // System\SCCTRemaster_Campaigns.ini
     std::wstring g_map;      // the map being played
+    int g_victories = -1;    // victorious campaigns in the store (-1 = not counted yet)
 
     std::wstring Lower(std::wstring s) { for (auto& c : s) c = towlower(c); return s; }
 
@@ -73,6 +82,14 @@ namespace
         return L"";
     }
 
+    int CountVictories()
+    {
+        int n = 0;
+        for (const auto& id : Campaigns())
+            if (ReadStr(Section(id), L"Status") == L"victorious") ++n;
+        return n;
+    }
+
     std::wstring NowText()
     {
         SYSTEMTIME t; GetLocalTime(&t);
@@ -105,8 +122,19 @@ namespace
         WriteStr(sec, (L"Mission" + std::to_wstring(n + 1)).c_str(), map);
     }
 
+    // The menu row: a star for every time CLUSTERFUCK was beaten.
+    const wchar_t* RowLabel()
+    {
+        static std::wstring label;
+        if (g_victories < 0) g_victories = CountVictories();
+        label = L"CLUSTERFUCK";
+        if (g_victories > 0) label += L" " + std::wstring(size_t(std::min(g_victories, 5)), L'*');
+        return label.c_str();
+    }
+
     void __fastcall hkBuilder(void* page, void* edx)
     {
+        const wchar_t* label = RowLabel();
         oBuilder(page, edx);
         __try
         {
@@ -116,7 +144,7 @@ namespace
                 // The list shows at most +A6h rows (visible = min(that, items), +A0h); the page sets 3.
                 uint8_t& maxRows = At<uint8_t>(list, kListMaxRows);
                 if (maxRows < kRow + 1) maxRows = kRow + 1;
-                pAddItem(list, nullptr, L"CLUSTERFUCK", 0);
+                pAddItem(list, nullptr, label, 0);
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -649,6 +677,7 @@ namespace
 
     void* g_menu = nullptr;
     void* g_samPawn = nullptr;
+    bool g_missionWon = false;   // this mission is won: a death now doesn't count
     bool g_allowSave = false, g_startSave = false, g_dead = false;
     float g_startSaveAfter = 0;
     std::wstring g_startName;
@@ -788,6 +817,7 @@ namespace
     {
         g_dead = true;
         const std::wstring sec = Section(g_active);
+        const bool victorious = ReadStr(sec, L"Status") == L"victorious";
         void* level = At<void*>(sam, 0x78);
         const float t = level ? At<float>(level, kTime) : 0.0f;
         Stats st;
@@ -833,6 +863,8 @@ namespace
             st.counts[2], st.counts[0], st.counts[1], st.counts[5], st.counts[3], st.counts[4], st.counts[6], st.counts[7], st.counts[8],
             int(deleted.size()), deleted.size() == 1 ? L"" : L"s", deleted.size() == 1 ? L"was" : L"were");
         std::wstring text = buf.data();
+        if (victorious)
+            text += L"\r\nThis Sam had already beaten CLUSTERFUCK (" + ReadStr(sec, L"Finished") + L"). He came back for more anyway.\r\n";
         if (!deleted.empty())
         {
             text += L"\r\nDeleted:\r\n";
@@ -847,7 +879,7 @@ namespace
             fwrite(utf8.data(), 1, utf8.size(), f);
             fclose(f);
         }
-        WriteStr(sec, L"Status", L"dead");
+        if (!victorious) WriteStr(sec, L"Status", L"dead");
         WriteStr(sec, L"Died", NowText());
         WriteStr(sec, L"Obituary", rip);
         WriteInt(sec, L"Saves", 0);
@@ -870,7 +902,7 @@ namespace
     void __fastcall hkTakeDamage(void* actor, void* edx, int dmg, void* inst, float hx, float hy, float hz,
                                  float nx, float ny, float nz, float mx, float my, float mz, int type, int pill)
     {
-        const bool watch = actor && actor == g_samPawn && !g_active.empty() && !g_dead;
+        const bool watch = actor && actor == g_samPawn && !g_active.empty() && !g_dead && !g_missionWon;
         const int before = watch ? HealthOf(actor) : 0;
         oTakeDamage(actor, edx, dmg, inst, hx, hy, hz, nx, ny, nz, mx, my, mz, type, pill);
         if (watch && before > 0 && HealthOf(actor) <= 0) ObituarySafe(actor, inst, dmg, type & 0xFF);
@@ -889,10 +921,253 @@ namespace
     }
 }
 
+// ---- victory ----
+//
+// The mission manager is EPlayerController.MISSION (+5C0h); its m_eMissionStatus (+B4h, byte: 0 playing, 1 won,
+// 2 failed) turns 1 in EndMission(true) while Sam is alive, during the 4-second fade before the mission-end menu.
+// Each won mission is stored in the campaign as "Won <map> = seconds,9 stat counters" (the RIP note's counters).
+namespace
+{
+    constexpr uintptr_t kMissionMgr = 0x5C0, kMissionStatus = 0xB4;
+    bool g_inMission = false;
+    std::wstring g_pendingCeremony;   // a victory whose ceremony wasn't seen to the end (shown at the next menu)
+
+    bool ReadProfileName(wchar_t (&out)[64])
+    {
+        out[0] = 0;
+        __try
+        {
+            const wchar_t* n = g_menu ? At<const wchar_t*>(g_menu, 0x130) : nullptr;
+            if (!n || !n[0] || wcsnlen(n, 64) >= 64) return false;
+            wcscpy_s(out, n);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+
+    std::wstring ProfileName()
+    {
+        wchar_t n[64];
+        return ReadProfileName(n) ? std::wstring(n) : std::wstring();
+    }
+
+    std::vector<std::wstring> MissionsOf(const std::wstring& sec)
+    {
+        std::vector<std::wstring> out;
+        const int n = ReadInt(sec, L"Missions");
+        for (int i = 1; i <= n; ++i) out.push_back(ReadStr(sec, (L"Mission" + std::to_wstring(i)).c_str()));
+        return out;
+    }
+
+    bool Has(const std::vector<std::wstring>& v, const wchar_t* map)
+    {
+        for (const auto& m : v)
+            if (!_wcsicmp(m.c_str(), map)) return true;
+        return false;
+    }
+
+    VictoryText::Data BuildData(const std::wstring& id)
+    {
+        VictoryText::Data d;
+        const std::wstring sec = Section(id);
+        d.id = id;
+        d.started = ReadStr(sec, L"Started");
+        d.finished = ReadStr(sec, L"Finished");
+        if (d.finished.empty()) d.finished = NowText();
+        d.profile = ReadStr(sec, L"Profile");
+        const auto reached = MissionsOf(sec);
+        for (int i = 0; i < VictoryText::kMissionCount; ++i)
+        {
+            VictoryText::Mission m;
+            m.map = VictoryText::kMaps[i][0];
+            m.name = VictoryText::kMaps[i][1];
+            m.reached = Has(reached, m.map.c_str());
+            const std::wstring won = ReadStr(sec, (L"Won " + m.map).c_str());
+            float t = -1;
+            int c[9] = {};
+            if (!won.empty() && swscanf_s(won.c_str(), L"%f,%d,%d,%d,%d,%d,%d,%d,%d,%d", &t, &c[0], &c[1], &c[2], &c[3], &c[4], &c[5], &c[6],
+                                          &c[7], &c[8]) == 10)
+            {
+                m.won = true;
+                m.time = t;
+                for (int k = 0; k < 9; ++k) m.c[k] = c[k];
+            }
+            m.reached = m.reached || m.won;
+            d.missions.push_back(m);
+        }
+        // Lives: this one, and every campaign that died before it began (IDs are start times).
+        for (const auto& other : Campaigns())
+            if (other < id && ReadStr(Section(other), L"Status") == L"dead") ++d.lives;
+        VictoryText::Compute(d);
+        return d;
+    }
+
+    std::wstring WriteText(const std::wstring& path, const std::wstring& text)
+    {
+        FILE* f = _wfopen(path.c_str(), L"wb");
+        if (!f) return L"";
+        const std::string utf8 = VictoryText::Utf8(text);
+        const bool ok = fwrite(utf8.data(), 1, utf8.size(), f) == utf8.size();
+        fclose(f);
+        return ok ? path : L"";
+    }
+
+    std::wstring DesktopFolder()
+    {
+        PWSTR p = nullptr;
+        std::wstring out;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &p)) && p) out = std::wstring(p) + L"\\";
+        if (p) CoTaskMemFree(p);
+        return out;
+    }
+
+    std::wstring SaveFolderOf(const std::wstring& sec)
+    {
+        const int n = ReadInt(sec, L"Saves");
+        for (int i = 1; i <= n; ++i)
+        {
+            const std::wstring p = ReadStr(sec, (L"Save" + std::to_wstring(i)).c_str());
+            if (!p.empty()) return p.substr(0, p.find_last_of(L"\\/") + 1);
+        }
+        return g_store.substr(0, g_store.find_last_of(L"\\/") + 1);
+    }
+
+    void BeatTheGame(const std::wstring& sec)
+    {
+        WriteStr(sec, L"Status", L"victorious");
+        WriteStr(sec, L"Finished", NowText());
+        WriteStr(sec, L"Celebrated", L"0");
+        const VictoryText::Data d = BuildData(g_active);
+        const std::wstring name = L"YOU ACTUALLY DID IT - CLUSTERFUCK " + g_active + L".txt";
+        const std::wstring text = VictoryText::Certificate(d);
+        const std::wstring cert = WriteText(SaveFolderOf(sec) + name, text);
+        std::wstring desk;
+        if (g_settings.clusterfuckDesktop)
+            if (const std::wstring folder = DesktopFolder(); !folder.empty()) desk = WriteText(folder + name, text);
+        WriteStr(sec, L"Certificate", cert);
+        if (!desk.empty()) WriteStr(sec, L"CertificateDesktop", desk);
+        g_victories = CountVictories();
+        LOG("[CLUSTERFUCK] YOU ACTUALLY DID IT: campaign %ls beat the game (%d lives, rank %ls); certificate %ls%ls%ls", g_active.c_str(),
+            d.lives, d.rank.c_str(), cert.empty() ? L"NOT written" : cert.c_str(), desk.empty() ? L"" : L", desktop copy ", desk.c_str());
+        Victory::Celebrate(d, cert.empty() ? desk : cert, desk);
+    }
+
+    void MissionWon(void* pawn)
+    {
+        g_missionWon = true;
+        const std::wstring sec = Section(g_active);
+        Stats st;
+        ReadStatsSafe(pawn, st);
+        void* level = At<void*>(pawn, 0x78);
+        const float t = level ? At<float>(level, kTime) : -1.0f;
+        wchar_t rec[160];
+        swprintf_s(rec, L"%.0f,%d,%d,%d,%d,%d,%d,%d,%d,%d", t, st.counts[0], st.counts[1], st.counts[2], st.counts[3], st.counts[4], st.counts[5],
+                   st.counts[6], st.counts[7], st.counts[8]);
+        WriteStr(sec, (L"Won " + g_map).c_str(), rec);
+        if (const std::wstring profile = ProfileName(); !profile.empty()) WriteStr(sec, L"Profile", profile);
+        const int idx = VictoryText::IndexOf(g_map);
+        LOG("[CLUSTERFUCK] mission %ls survived (campaign %ls, %d:%02d, %d killed, %d knocked out, %d alarms)", g_map.c_str(), g_active.c_str(),
+            int(t) / 60, int(t) % 60, st.counts[2], st.counts[0], st.counts[8]);
+        if (idx != VictoryText::kMissionCount - 1)
+        {
+            wchar_t line[128];
+            if (idx >= 0) swprintf_s(line, L"CLUSTERFUCK   -   %d / %d   -   %ls", idx + 1, VictoryText::kMissionCount, VictoryText::kMaps[idx][1]);
+            else swprintf_s(line, L"CLUSTERFUCK   -   %ls", g_map.c_str());
+            Victory::Toast(L"MISSION SURVIVED", line, true);
+            return;
+        }
+        // The last mission.
+        if (ReadStr(sec, L"Status") == L"victorious")
+        {
+            Victory::Toast(L"YOU DID IT. AGAIN.", L"This campaign already has its medal. Show-off.", true);
+            return;
+        }
+        // Every mission played in this life: loaded as a new mission of the campaign, or won in it.
+        const auto reached = MissionsOf(sec);
+        std::wstring first;
+        int missing = 0;
+        for (int i = 0; i < VictoryText::kMissionCount; ++i)
+        {
+            const bool played = Has(reached, VictoryText::kMaps[i][0]) || !ReadStr(sec, (std::wstring(L"Won ") + VictoryText::kMaps[i][0]).c_str()).empty();
+            if (!played) ++missing;
+            else if (first.empty()) first = VictoryText::kMaps[i][1];
+        }
+        if (missing)
+        {
+            LOG("[CLUSTERFUCK] Kokubo Sosho won, but campaign %ls skipped %d of the 11 missions (it began at %ls): no medal", g_active.c_str(),
+                missing, first.c_str());
+            Victory::Toast(L"KOKUBO SOSHO SURVIVED!", L"But this life began at " + (first.empty() ? std::wstring(L"a later mission") : first) + L" and missed " +
+                                                      std::to_wstring(missing) + L" of the 11 missions: the medal takes all 11 in one CLUSTERFUCK life.", true);
+            return;
+        }
+        BeatTheGame(sec);
+    }
+
+    void MissionTick(void* pawn)
+    {
+        if (!g_inMission || g_missionWon || g_dead) return;
+        void* pc = At<void*>(pawn, 0x2B4);
+        void* mm = pc ? At<void*>(pc, kMissionMgr) : nullptr;
+        if (!mm || At<uint8_t>(mm, kMissionStatus) != 1 || At<int>(pawn, kHealth) <= 0) return;
+        MissionWon(pawn);
+    }
+
+    void MissionTickSafe(void* pawn)
+    {
+        __try { MissionTick(pawn); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { g_missionWon = true; LOG("[CLUSTERFUCK] [!] the mission-won check failed"); }
+    }
+
+    // The latest victorious campaign ("" if none).
+    std::wstring LatestVictory()
+    {
+        std::wstring best;
+        for (const auto& id : Campaigns())
+            if (ReadStr(Section(id), L"Status") == L"victorious" && id > best) best = id;
+        return best;
+    }
+}
+
+void Clusterfuck::Celebrated(const wchar_t* id)
+{
+    if (!id || !*id) return;
+    WriteStr(Section(id), L"Celebrated", L"1");
+    if (g_pendingCeremony == id) g_pendingCeremony.clear();
+}
+
+int Clusterfuck::Victories()
+{
+    if (g_victories < 0) g_victories = g_store.empty() ? 0 : CountVictories();
+    return g_victories;
+}
+
+void Clusterfuck::PreviewVictory()
+{
+    // With a victory: the latest one again. Without: a sample campaign and a preview certificate in System.
+    if (const std::wstring id = LatestVictory(); !id.empty())
+    {
+        const std::wstring sec = Section(id);
+        Victory::Celebrate(BuildData(id), ReadStr(sec, L"Certificate"), ReadStr(sec, L"CertificateDesktop"));
+        return;
+    }
+    VictoryText::Data d = VictoryText::Sample();
+    if (const std::wstring p = ProfileName(); !p.empty()) d.profile = p;
+    const std::wstring path = WriteText(g_store.substr(0, g_store.find_last_of(L"\\/") + 1) + L"YOU ACTUALLY DID IT - PREVIEW.txt",
+                                        VictoryText::Certificate(d));
+    LOG("[CLUSTERFUCK] victory preview; sample certificate %ls", path.empty() ? L"NOT written" : path.c_str());
+    Victory::Celebrate(d, path, L"");
+}
+
+void Clusterfuck::PreviewToast()
+{
+    Victory::Toast(L"MISSION SURVIVED", L"CLUSTERFUCK   -   4 / 11   -   Penthouse", true);
+}
+
 void Clusterfuck::OnPlayerTick(void* pawn)
 {
     g_samPawn = pawn;
     if (g_active.empty() || !pawn) return;
+    MissionTickSafe(pawn);
     bool died = false;
     __try
     {
@@ -900,7 +1175,7 @@ void Clusterfuck::OnPlayerTick(void* pawn)
         int& hp = At<int>(pawn, kHealth);
         if (hp > kMaxHealth) hp = kMaxHealth;
         SabotageDefuse(pawn);
-        died = !g_dead && hp <= 0;
+        died = !g_dead && !g_missionWon && hp <= 0;   // a death after the mission is won doesn't count
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {}
     if (died) ObituarySafe(pawn, At<void*>(pawn, 0xCF4), 0, -1);   // a death TakeDamage didn't see
@@ -915,8 +1190,21 @@ const wchar_t* Clusterfuck::CampaignId() { return g_active.c_str(); }
 void Clusterfuck::OnMapLoad(const wchar_t* map, const wchar_t* options)
 {
     const std::wstring m = map ? map : L"", o = Lower(options ? options : L"");
-    if (m.empty() || Lower(m).find(L"menu") != std::wstring::npos) return;   // the menu keeps the campaign as it is
+    g_missionWon = false;
+    if (m.empty() || Lower(m).find(L"menu") != std::wstring::npos)   // the menu keeps the campaign as it is
+    {
+        g_inMission = false;
+        if (!g_pendingCeremony.empty())
+        {
+            const std::wstring id = g_pendingCeremony, sec = Section(id);
+            g_pendingCeremony.clear();
+            LOG("[CLUSTERFUCK] campaign %ls's victory ceremony wasn't seen to the end: here it is", id.c_str());
+            Victory::Celebrate(BuildData(id), ReadStr(sec, L"Certificate"), ReadStr(sec, L"CertificateDesktop"));
+        }
+        return;
+    }
     g_map = m;
+    g_inMission = true;
     g_dead = false;
     g_startSave = false;
     if (o.find(L"missiondiff=") == std::wstring::npos) return;   // a save: OnSaveLoaded decides
@@ -944,6 +1232,7 @@ void Clusterfuck::OnSaveLoaded(const wchar_t* path)
     g_pending = Pending::None;
     g_dead = false;
     g_startSave = false;
+    g_missionWon = false;
     const std::wstring id = CampaignOfSave(path);
     if (id != g_active)
         LOG("[CLUSTERFUCK] %ls is %ls", path, id.empty() ? L"not a CLUSTERFUCK save" : (L"from CLUSTERFUCK campaign " + id).c_str());
@@ -969,6 +1258,9 @@ void Clusterfuck::Init()
     GetModuleFileNameW(g_self, self, MAX_PATH);
     g_store = self;
     g_store = g_store.substr(0, g_store.find_last_of(L"\\/") + 1) + L"SCCTRemaster_Campaigns.ini";
+    g_victories = CountVictories();
+    for (const auto& id : Campaigns())
+        if (ReadStr(Section(id), L"Status") == L"victorious" && ReadStr(Section(id), L"Celebrated") == L"0") g_pendingCeremony = id;
     if (!g_settings.clusterfuck)
     {
         LOG("Clusterfuck: off");
@@ -987,8 +1279,8 @@ void Clusterfuck::Init()
     }
     if (const uintptr_t a = Mem::Find("difficulty select", "51 8B CE E8 ?? ?? ?? ?? B0 01 8B 4E 14 5F 88 41 14"))
         menu = Mem::CallHook("difficulty select", a + 3, &OnSelect) && menu;
-    LOG("Clusterfuck: menu entry %s; campaigns in %ls", menu ? "added (CLUSTERFUCK after EXPERT)" : "NOT added (menu code not found)",
-        g_store.c_str());
+    LOG("Clusterfuck: menu entry %s; campaigns in %ls; beaten %d time(s)%s", menu ? "added (CLUSTERFUCK after EXPERT)" : "NOT added (menu code not found)",
+        g_store.c_str(), g_victories, g_pendingCeremony.empty() ? "" : " (a victory ceremony is waiting for the menu)");
 
     // Sam's side (each only acts while a CLUSTERFUCK campaign is active).
     int sam = 0;

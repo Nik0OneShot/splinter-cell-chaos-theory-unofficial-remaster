@@ -64,6 +64,8 @@ namespace
         if (auto a = Mem::Find("UObject::GetFullName", "56 8B 74 24 08 85 F6 57 8B F9 75"))
             Game::GetFullName = reinterpret_cast<Game::GetFullNameFn>(a);
 
+        SafeInit("Mods", &Mods::Init);
+        SafeInit("Textures", &Textures::Init);
         SafeInit("Framerate", &Framerate::Init);
         SafeInit("Widescreen", &Widescreen::Init);
         SafeInit("Window", &Window::Init);
@@ -81,6 +83,9 @@ namespace
         SafeInit("Aim", &Aim::Init);
         SafeInit("Scripted", &Scripted::Init);
         SafeInit("Clusterfuck", &Clusterfuck::Init);
+        SafeInit("Plush", &Plush::Init);             // after Clusterfuck (its unlock), before Scripting (its Lua)
+        SafeInit("Scripting", &Scripting::Init);
+        SafeInit("Editor", &Editor::Init);
         LOG("Init complete");
     }
 

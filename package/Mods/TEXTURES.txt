@@ -1,0 +1,67 @@
+SPLINTER CELL CHAOS THEORY - UNOFFICIAL REMASTER: TEXTURE PACKS
+================================================================
+
+Mods can replace any texture in the game (walls, characters, weapons, the HUD,
+fonts, ...) at any resolution, without unpacking the game's files.
+
+
+1. DUMP THE TEXTURES
+--------------------
+Open the level editor (~ key) and tick "Dump textures" in its Tools tab (the log
+says "texture dumping on"): every texture that's already loaded is saved at once,
+and every texture the game loads from then on too, to
+
+    Splintercell Chaos Theory\Mods\_TextureDump\
+
+Untick it to stop. Textures saved while the game loads them get the game's own
+name in the file name, so the best way is to tick it in the main menu and then
+load a mission. (Or set DumpTextures = 1 in the [Mods]
+section of System\SCCTRemaster.ini to dump all the time.) Each texture is saved
+once: dumping again later only adds the textures that aren't there yet (and
+gives an unnamed one its name if it's found this time), so play the levels you
+want textures from.
+
+The files are named like
+
+    01_Lighthouse.Rocks.CliffWall__3f2a9c0b7d1e4f60.png
+
+The part after the two underscores is the texture's fingerprint: that's what
+the game recognises. The name before it is the game's own name for the texture
+when the remaster could find it (some textures only have the fingerprint).
+DumpFormat = dds saves DDS files in the texture's own format instead of PNG.
+
+
+2. MAKE THE REPLACEMENT
+-----------------------
+Edit the image (any size: 2x or 4x the original for an HD pack), keep the
+fingerprint at the end of the file name, and put it in your mod's Textures
+folder:
+
+    Mods\MyTexturePack\mod.ini
+    Mods\MyTexturePack\Textures\CliffWall_3f2a9c0b7d1e4f60.png
+
+Subfolders inside Textures\ are fine. The file name can be anything as long as
+it ends with the 16-character fingerprint (with a "_" or "-" before it).
+
+Formats:
+  - .png, .tga, .jpg, .bmp: easiest. The remaster compresses them to DXT when
+    the original texture was compressed, and makes the smaller mip levels.
+    Transparency comes from the alpha channel.
+  - .dds: used exactly as saved (DXT1, DXT3, DXT5 or uncompressed RGB/RGBA,
+    with or without mipmaps). Best for big HD packs: compression and mipmaps
+    are done once by your tool instead of at every level load. DX10-style DDS
+    files (BC7 etc.) don't work in this game.
+
+The game is a 32-bit program, so very large uncompressed textures can run it
+out of memory: use DDS with DXT compression for a big pack.
+
+
+3. TEST IT
+----------
+Start the game: the log (System\SCCTRemaster.log) lists how many replacement
+textures each mod has, and a [TEX] line for each one as the game first uses
+it. If a texture changes every frame (some effects do), it can't be replaced.
+
+When two mods replace the same texture, the one with the higher Priority in
+its mod.ini wins. [Mods] TexturePacks = 0 in SCCTRemaster.ini turns all
+replacements off.

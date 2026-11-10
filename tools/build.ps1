@@ -32,7 +32,19 @@ New-Item -ItemType Directory -Force (Join-Path $dist "System") | Out-Null
 Copy-Item "build\$Configuration\d3d9.dll" (Join-Path $dist "System\d3d9.dll")
 Copy-Item "package\System\*" (Join-Path $dist "System") -Recurse
 Copy-Item "tools\install.ps1", "tools\Install.bat" $dist
+Copy-Item "package\Mods" (Join-Path $dist "Mods") -Recurse
 Copy-Item "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md" $dist
+
+# --- The CLUSTERFUCK award ----------------------------------------------------------------------
+# Packed from references\niko_plush (local only: a glTF model and a meow sound; see tools\pack_plush.py). Without it
+# the package has no plush and the game runs without one.
+$plushSrc = Join-Path $root "references\niko_plush"
+if (Test-Path $plushSrc) {
+    & python -I (Join-Path $root "tools\pack_plush.py") $plushSrc (Join-Path $dist "System\SCCTRemaster_Award.pak") | Out-Host
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Packing the award failed: the package has none." }
+} else {
+    Write-Host "No references\niko_plush: the package has no award."
+}
 
 # --- DXVK (Direct3D 9 on Vulkan, zlib license): loaded through [Graphics] D3D9Chain -----------
 Copy-Item "package\dxvk\d3d9_dxvk.dll", "package\dxvk\dxvk.conf" (Join-Path $dist "System")

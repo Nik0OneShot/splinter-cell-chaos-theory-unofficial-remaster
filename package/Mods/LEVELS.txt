@@ -1,0 +1,131 @@
+SPLINTER CELL CHAOS THEORY - UNOFFICIAL REMASTER: LEVEL CHANGES
+================================================================
+
+Mods can add actors to a map, change the ones already in it, and remove them:
+guards, props, lights, doors, pickups, anything. A mod's level changes for a
+map go in a text file named after the map:
+
+    Mods\MyMod\Levels\01_Lighthouse.txt
+
+They're applied every time that mission starts (also on Retry). Loading a
+savegame doesn't apply them again: the save already contains them. So after
+installing or editing a level change, start the mission again.
+
+
+MAKING THEM IN THE LEVEL EDITOR
+-------------------------------
+The easiest way: open the level editor (~ key) in the mission, move, duplicate,
+delete and edit actors, then press Ctrl+S (or Save in the Tools tab). It writes
+
+    Mods\<folder>\Levels\<map>.txt
+
+for the mod folder named in the Tools tab (MyLevel at first; a new folder gets a
+mod.ini and works straight away). Start the mission again to see it applied.
+
+- If the mission started with that file applied, saving keeps everything the
+  file does and merges your new edits in (an actor it added that you deleted
+  goes away; one you moved gets its new Location). So you can save, play, come
+  back and keep editing.
+- Each value is saved as it was when you set it: a guard you placed is saved
+  where you put him, even if he walked off afterwards.
+- A copy is saved as Copy= the map actor it all started from, with every
+  property that was set along the way.
+- Saving rewrites the file, so comments in it aren't kept.
+- After loading a savegame the level files aren't applied (the save already has
+  them), so the editor can't tell what the file added: it asks before replacing
+  the file. Start the mission from the menu to edit an existing file.
+- Things the game made while playing (a guard's weapon, effects) have no fixed
+  name, so changes to them can't be saved.
+
+
+FINDING NAMES
+-------------
+To write a file by hand, you need the actors' names. Open the level editor (~
+key) while playing: its Actors tab lists every actor of
+the level (nearest first) and its Inspector shows any actor's properties. The
+Tools tab's "Write the actor list" button saves the whole list to
+
+    Splintercell Chaos Theory\Mods\_LevelDump\<map>.txt
+
+with its name, class, position, tag and static mesh. The map names are the
+ones in the game's Data\Maps folder (01_Lighthouse, 02_CargoShip, ...).
+
+
+THE FORMAT
+----------
+    ; A comment. Lines starting with ; or // are ignored.
+
+    Begin Actor Class=EGameplayObject Name=MyCrate
+        Location=(X=4578,Y=2253,Z=-650)
+        Rotation=(Yaw=16384)
+        StaticMesh=StaticMesh'SomePackage.SomeMesh'
+    End Actor
+
+    Begin Change Name=EPeoplesVoiceSoldier3
+        Health=500
+        DrawScale=1.5
+    End Change
+
+    Delete Name=ELight12
+
+Begin Actor ... End Actor adds a new actor of that class. Name= is optional:
+it's a label for this file, so other lines can point at the new actor with
+@MyCrate (e.g. Owner=@MyCrate). Without a Location the actor appears where Sam
+starts.
+
+Begin Actor Copy=<name> makes a copy of an actor in the map (or of an actor
+added earlier in the file, by its label): the same class, with every property a
+level designer sets copied over (mesh, AI behaviour pattern, zones, weapons,
+voice, ...), but not its position, tag or links to things like its gun. This
+is how to add guards: a copied guard also gets an AI controller like the
+original's. Lines inside the block then change the copy:
+
+    Begin Actor Copy=EPeoplesVoiceSoldier0 Name=ExtraGuard
+        Location=(X=4978,Y=2253,Z=-698)
+        Tag=ExtraGuard
+    End Actor
+
+Begin Change Name=... End Change changes an actor that's already in the map
+(its name from the editor or the actor list).
+
+Delete Name=... removes an actor. An actor the game won't destroy (part of the
+level itself) is hidden and loses its collision instead.
+
+Inside a block, each line sets one property, with the same names and syntax as
+UnrealEd and the game's .t3d files:
+    Health=500                      numbers
+    bHidden=True                    true/false
+    Tag=Guard01                     names
+    Location=(X=1,Y=2,Z=3)          structs
+    Skins(1)=Texture'Pkg.Name'      one element of an array
+    StaticMesh=StaticMesh'Pkg.Name' objects (by their full name)
+
+Location, Rotation, StaticMesh, DrawType, DrawScale, DrawScale3D, Physics, the
+collision flags (bCollideActors, bBlockActors, bBlockPlayers) and the collision
+size (CollisionRadius, CollisionHeight) are applied through the game's own
+functions, so the actor really moves, changes shape and collides correctly.
+
+EGameplayObject is the game's breakable-object class: gunfire and explosions can
+destroy one. Add bDamageable=False to a prop that should stay.
+
+Some classes can't be added while the game runs (level geometry such as
+StaticMeshActor and most lights are fixed when the map is built): use
+EGameplayObject for props. Guards made with Class= have no body or AI; copy an
+existing guard instead (Copy=). Copied guards are still experimental: they may
+not patrol like the map's own, since their patrols are tied to the original's
+scripted events.
+
+
+CHECKING
+--------
+The log (System\SCCTRemaster.log) says for each mod and map how many actors were
+added, changed and deleted, and lists every line that didn't work and why.
+
+When several mods change the same map, they're applied in load order (lowest
+Priority first). [Mods] LevelChanges = 0 in SCCTRemaster.ini turns level
+changes off.
+
+Lua scripts can do the same things at any time (see SCRIPTING.txt): actor(name)
+finds an actor by name, importtext(obj, property, text) sets a property from
+this text syntax, and level():Spawn(class("..."), nil, nil, location, rotation)
+adds an actor.

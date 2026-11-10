@@ -91,6 +91,14 @@ void** Script::NativeSlot(int index)
     return &g_natives[index];
 }
 
+bool Script::CallNativeEx(void* obj, void* code, const uint8_t* args, void* result, uint8_t* locals)
+{
+    if (!obj || !code || !args || !result) return false;
+    alignas(16) uint8_t own[256] = {};
+    Frame frame{ g_frameVtbl, nullptr, obj, args, locals ? locals : own, {} };
+    return SafeExec(reinterpret_cast<Exec_t>(code), obj, &frame, result);
+}
+
 bool Script::CallNative(void* obj, void* code, const uint8_t* args)
 {
     if (!obj || !code || !args) return false;
@@ -139,14 +147,13 @@ bool Script::NameText(int name, wchar_t* out, size_t len)
         void** data = *g_namesData;
         const int num = *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(g_namesData) + 4);
         if (!data || name >= num || !data[name]) return false;
-        // The text is TCHAR (wide); if it looks like 8-bit text instead, read it as that. Only printable ASCII
-        // is copied, so the result is always safe to log.
+        // The text is 8-bit (FindField widens it byte by byte with 0x10CCCDE0 before comparing). Only printable
+        // ASCII is copied, so the result is always safe to log.
         const uint8_t* b = reinterpret_cast<const uint8_t*>(reinterpret_cast<uintptr_t>(data[name]) + 0xC);
-        const bool wide = b[0] && !b[1];
         size_t i = 0;
         for (; i + 1 < len; ++i)
         {
-            const unsigned c = wide ? reinterpret_cast<const wchar_t*>(b)[i] : b[i];
+            const unsigned c = b[i];
             if (!c) break;
             out[i] = (c >= 0x20 && c < 0x7F) ? static_cast<wchar_t>(c) : L'?';
         }
@@ -166,6 +173,15 @@ int Script::Name(const wchar_t* text)
     if (!pFNameCtor || !text || !*text) return 0;
     int name = 0;
     __try { pFNameCtor(&name, nullptr, text, 0); }   // FNAME_Find: 0 when the name doesn't exist
+    __except (EXCEPTION_EXECUTE_HANDLER) { name = 0; }
+    return name;
+}
+
+int Script::NameAdd(const wchar_t* text)
+{
+    if (!pFNameCtor || !text || !*text) return 0;
+    int name = 0;
+    __try { pFNameCtor(&name, nullptr, text, 1); }   // FNAME_Add: creates the name when it doesn't exist
     __except (EXCEPTION_EXECUTE_HANDLER) { name = 0; }
     return name;
 }

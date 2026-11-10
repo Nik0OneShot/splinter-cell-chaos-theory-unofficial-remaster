@@ -98,6 +98,14 @@ struct Settings
     bool  crouchNoiseFix = true;         // steps during a crouch transition count as standing; skipped steps are made
     bool  hackingClickFix = true;        // [Mouse] hacking screen: click on press, 150 ms grace for a number just left
     bool  clusterfuck = true;            // CLUSTERFUCK difficulty in the menu (after Expert)
+    bool  clusterfuckDesktop = true;     // beating CLUSTERFUCK also puts the victory certificate on the desktop
+    int   nikoPlush = 1;                 // the Niko plush: 0 never, 1 once CLUSTERFUCK is beaten, 2 always (to try it)
+    int   nikoPlushVolume = 100;         // meow volume (%)
+    float nikoPlushNoise = 600.0f;       // how far guards hear it land (units)
+    float nikoPlushMinLight = 0.2f;      // its brightness in the dark (1 = fully lit)
+    float nikoPlushFullLight = 100.0f;   // the light level (Sam's meter scale) at which it's fully lit
+    float nikoPlushHdrScale = 1.0f;      // brightness multiplier when drawn into the HDR scene
+    int   nikoPlushDebug = 0;            // [Debug] NikoPlushDebug: 2 = without the depth test, 3 = plain magenta
     bool  fairHacking = true;            // hack locks never run out; hacking a device again is no harder (failing still sounds the alarm)
     bool  logCursor = true;              // [Debug] log menu-cursor jumps ([CURSOR])
     bool  logCrouch = false;             // [Debug] log Sam's animation channels after each crouch toggle
@@ -110,6 +118,22 @@ struct Settings
     int   speedStages = 9;            // mouse-wheel speed stages between slowest and fastest (vanilla 5, 0 = game's own)
     float bathhouseEndingDelay = 15.0f; // Bathhouse bombs: seconds before the elite guards come in after each defusal (0 = at once)
     float bathhouseSpawnClearance = 6.0f; // ...and not while Sam is within this many metres of their spawn point (0 = any time)
+
+    // [Mods]
+    bool  mods = true;                // load mods from <game>\Mods\<name>\ (System\ and Data\ files replace or add game files)
+    bool  scripts = true;             // run mods' Lua scripts (Mods\<name>\Scripts\*.lua)
+    int   reloadScriptsKey = 0;       // with Ctrl held: reload every mod's scripts (0 = off; the editor's Tools tab has it)
+    bool  logModFiles = true;
+    bool  texturePacks = true;        // replace textures from mods' Textures folders
+    bool  levelChanges = true;        // apply mods' Levels\<map>.txt when a mission starts
+    int   levelDumpKey = 0;           // with Ctrl held: list the level's actors in Mods\_LevelDump (0 = off; the editor's Tools tab has it)
+    int   editorKey = 0xC0;           // [Editor] opens/closes the level editor (0xC0 = ~, unbound in the game; 0 = off)
+    bool  editorPause = true;         // [Editor] freeze the world while the editor is open
+    float editorScale = 0.0f;         // [Editor] UI size (0 = from the screen height)
+    std::wstring editorFolder = L"MyLevel";   // [Editor] SaveFolder: the mod folder Save writes level files to
+    bool  dumpTextures = false;       // save every texture the game loads to Mods\_TextureDump
+    bool  dumpTexturesDDS = false;    // dump as DDS (the texture's own format) instead of PNG
+    int   dumpTexturesKey = 0;        // with Ctrl held: switch dumping on/off while playing (0 = off; the editor's Tools tab has it)         // log each game file a mod provides, the first time the game opens it
 
     // [Debug]
     int   logLevel = 1;
@@ -131,4 +155,5 @@ namespace Config
 {
     void Load(const std::wstring& iniPath);
     void Dump();
+    void Save(const wchar_t* section, const wchar_t* key, const wchar_t* value);   // writes one value to SCCTRemaster.ini
 }

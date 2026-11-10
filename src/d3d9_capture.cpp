@@ -207,15 +207,46 @@ void Capture::OnSetPixelShaderConstantF(UINT start, const float* d, UINT count)
     for (UINT i = 0; i < count && d; ++i)
         if (start + i < 8) std::memcpy(g_psConst[start + i], d + i * 4, 16);
 }
+namespace
+{
+    // "WxH:format", and " BB" for the back buffer.
+    void SurfaceText(IDirect3DSurface9* s, char* out, size_t n)
+    {
+        D3DSURFACE_DESC d{};
+        bool back = false;
+        if (s)
+        {
+            s->GetDesc(&d);
+            IDirect3DDevice9* dev = nullptr;
+            IDirect3DSurface9* bb = nullptr;
+            if (SUCCEEDED(s->GetDevice(&dev)) && dev)
+            {
+                back = SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) && bb == s;
+                if (bb) bb->Release();
+                dev->Release();
+            }
+        }
+        sprintf_s(out, n, "%ux%u:%d%s", d.Width, d.Height, int(d.Format), back ? " BB" : "");
+    }
+}
+
 void Capture::OnSetRenderTarget(DWORD index, IDirect3DSurface9* rt)
 {
     if (index == 0) g_rt = rt;
     if (g_out && index == 0)
     {
-        D3DSURFACE_DESC d{};
-        if (rt) rt->GetDesc(&d);
-        fprintf(g_out, "SetRenderTarget0 %ux%u:%d\n", d.Width, d.Height, int(d.Format));
+        char t[64];
+        SurfaceText(rt, t, sizeof(t));
+        fprintf(g_out, "SetRenderTarget0 %s\n", t);
     }
+}
+void Capture::OnStretchRect(IDirect3DSurface9* src, IDirect3DSurface9* dst)
+{
+    if (!g_out) return;
+    char a[64], b[64];
+    SurfaceText(src, a, sizeof(a));
+    SurfaceText(dst, b, sizeof(b));
+    fprintf(g_out, "StretchRect %s -> %s\n", a, b);
 }
 void Capture::OnClear(DWORD flags, D3DCOLOR color)
 {

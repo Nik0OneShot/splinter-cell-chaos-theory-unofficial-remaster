@@ -175,7 +175,34 @@ void Config::Load(const std::wstring& iniPath)
     s.bathhouseEndingDelay = GetFloat(L"Gameplay", L"BathhouseEndingDelay", s.bathhouseEndingDelay);
     s.fairHacking = GetBool(L"Gameplay", L"FairHacking", s.fairHacking);
     s.clusterfuck = GetBool(L"Gameplay", L"Clusterfuck", s.clusterfuck);
+    s.clusterfuckDesktop = GetBool(L"Gameplay", L"ClusterfuckCertificateOnDesktop", s.clusterfuckDesktop);
+    s.nikoPlush = GetInt(L"Gameplay", L"NikoPlush", s.nikoPlush);
+    s.nikoPlushVolume = GetInt(L"Gameplay", L"NikoPlushVolume", s.nikoPlushVolume);
+    s.nikoPlushNoise = GetFloat(L"Gameplay", L"NikoPlushNoise", s.nikoPlushNoise);
+    s.nikoPlushMinLight = GetFloat(L"Gameplay", L"NikoPlushMinLight", s.nikoPlushMinLight);
+    s.nikoPlushFullLight = std::max(1.0f, GetFloat(L"Gameplay", L"NikoPlushFullLight", s.nikoPlushFullLight));
+    s.nikoPlushHdrScale = GetFloat(L"Gameplay", L"NikoPlushHdrScale", s.nikoPlushHdrScale);
+    s.nikoPlushDebug = GetInt(L"Debug", L"NikoPlushDebug", s.nikoPlushDebug);
     s.bathhouseSpawnClearance = GetFloat(L"Gameplay", L"BathhouseSpawnClearance", s.bathhouseSpawnClearance);
+
+    s.mods        = GetBool(L"Mods", L"Mods", s.mods);
+    s.logModFiles = GetBool(L"Mods", L"LogModFiles", s.logModFiles);
+    s.texturePacks = GetBool(L"Mods", L"TexturePacks", s.texturePacks);
+    s.levelChanges = GetBool(L"Mods", L"LevelChanges", s.levelChanges);
+    s.levelDumpKey = GetInt(L"Mods", L"LevelDumpKey", s.levelDumpKey);
+    s.editorKey = GetInt(L"Editor", L"EditorKey", s.editorKey);
+    s.editorPause = GetBool(L"Editor", L"EditorPause", s.editorPause);
+    s.editorScale = GetFloat(L"Editor", L"UIScale", s.editorScale);
+    s.editorFolder = GetString(L"Editor", L"SaveFolder", s.editorFolder.c_str());
+    s.dumpTextures = GetBool(L"Mods", L"DumpTextures", s.dumpTextures);
+    s.dumpTexturesKey = GetInt(L"Mods", L"DumpTexturesKey", s.dumpTexturesKey);
+    {
+        wchar_t fmt[16] = {};
+        GetPrivateProfileStringW(L"Mods", L"DumpFormat", L"png", fmt, 16, g_path.c_str());
+        s.dumpTexturesDDS = _wcsnicmp(fmt, L"dds", 3) == 0;
+    }
+    s.scripts     = GetBool(L"Mods", L"Scripts", s.scripts);
+    s.reloadScriptsKey = GetInt(L"Mods", L"ReloadScriptsKey", s.reloadScriptsKey);
 
     s.logLevel        = GetInt (L"Debug", L"LogLevel", s.logLevel);
     s.logActorClasses = GetBool(L"Debug", L"LogActorClasses", s.logActorClasses);
@@ -203,6 +230,11 @@ void Config::Load(const std::wstring& iniPath)
     s.detectionBaseline = std::clamp(s.detectionBaseline, 0, 3);
     if (s.speedStages != 0)
         s.speedStages = std::clamp(s.speedStages, 2, 41);
+}
+
+void Config::Save(const wchar_t* section, const wchar_t* key, const wchar_t* value)
+{
+    if (!g_path.empty()) WritePrivateProfileStringW(section, key, value, g_path.c_str());
 }
 
 void Config::Dump()

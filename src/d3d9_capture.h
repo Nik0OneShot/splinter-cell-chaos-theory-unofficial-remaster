@@ -15,6 +15,7 @@ namespace Capture
     void OnSetPixelShaderConstantF(UINT start, const float* data, UINT count);
     void OnSetRenderTarget(DWORD index, IDirect3DSurface9* rt);
     void OnClear(DWORD flags, D3DCOLOR color);
+    void OnStretchRect(IDirect3DSurface9* src, IDirect3DSurface9* dst);
     void OnDraw(const char* kind, unsigned prim, unsigned count);
     bool Active();
 }

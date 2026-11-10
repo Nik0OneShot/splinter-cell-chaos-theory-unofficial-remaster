@@ -1,0 +1,20 @@
+; Example level change for 01_Lighthouse (this folder starts with an underscore, so it isn't used).
+; See Mods\LEVELS.txt. Open the level editor (~ key) to see its actors' names.
+
+; Make the first technician twice as big.
+Begin Change Name=EPeoplesVoiceTechnician0
+    DrawScale=2.0
+End Change
+
+; Add a prop next to where Sam starts (replace the mesh with one from the editor's actor list).
+;Begin Actor Class=EGameplayObject Name=MyProp
+;    Location=(X=4700,Y=2253,Z=-700)
+;    StaticMesh=StaticMesh'SomePackage.SomeMesh'
+;    bCollideActors=True
+;    bBlockActors=True
+;    bBlockPlayers=True
+;    bDamageable=False          ; (otherwise gunfire can destroy it)
+;End Actor
+
+; Remove an actor.
+;Delete Name=SomeActorName

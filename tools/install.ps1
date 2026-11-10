@@ -83,6 +83,14 @@ Get-ChildItem (Join-Path $here "System") | ForEach-Object {
         Copy-Item -Force $_.FullName (Join-Path $sys $_.Name)
     }
 }
+# Mods folder: the readme and the example mod (the player's own mods are left alone).
+$modsSrc = Join-Path $here "Mods"
+if (Test-Path $modsSrc) {
+    $modsDst = Join-Path $GamePath "Mods"
+    New-Item -ItemType Directory -Force $modsDst | Out-Null
+    Copy-Item -Force (Join-Path $modsSrc "README.txt"), (Join-Path $modsSrc "SCRIPTING.txt"), (Join-Path $modsSrc "TEXTURES.txt"), (Join-Path $modsSrc "LEVELS.txt") $modsDst
+    Copy-Item -Force -Recurse (Join-Path $modsSrc "_Example") $modsDst
+}
 Write-Host ""
 Write-Host "Done. Settings: System\SCCTRemaster.ini   Log: System\SCCTRemaster.log"
 Write-Host "Previous files are in: $backup"

@@ -1,10 +1,10 @@
-# Splinter Cell Chaos Theory – Unofficial Remaster
+# Splinter Cell Chaos Theory â€“ Unofficial Remaster
 
 A fan-made overhaul of the PC version of *Tom Clancy's Splinter Cell Chaos Theory* (Steam 1.05). One
 self-contained `d3d9.dll` fixes the game on modern PCs and reworks the guard AI. It comes with a curated set of
 audio, controller and renderer components.
 
-**Status:** `1.0.0-dev.101`. The whole campaign has been played through on Expert with the mod (3440x1440, AMD
+**Status:** `1.0.0-dev.142`. The whole campaign has been played through on Expert with the mod (3440x1440, AMD
 RX 9060 XT) with no progression bugs. The new CLUSTERFUCK difficulty is still being tested.
 
 ## Features
@@ -86,8 +86,47 @@ meant to be unfair.
 - **Ironman:** no manual saves. The mod saves once at the start of every mission.
 - **Permadeath:** when Sam dies, every save of that playthrough is deleted (and only that one). A
   `REST IN PEACE` text file takes their place in the save folder: how he died, who killed him and how far he got.
+- **Victory:** every mission you survive gets a "MISSION SURVIVED" banner. Beat all 11 missions in one life and the
+  end of Kokubo Sosho turns into **YOU ACTUALLY DID IT!**: a full-screen ceremony with a fanfare, confetti,
+  fireworks and a medal (the Order of the Clusterfuck), your rank, badges and stats. A
+  `YOU ACTUALLY DID IT - CLUSTERFUCK <id>.txt` certificate goes in the save folder and on your desktop
+  (`ClusterfuckCertificateOnDesktop = 0` keeps it off the desktop). The difficulty menu shows a star after
+  CLUSTERFUCK for each time it's been beaten. The level editor's Tools tab can preview the ceremony.
+- **An award:** beat CLUSTERFUCK and you take a little something into every mission after that, at any difficulty.
+  What it is, you'll have to find out.
 
 `Clusterfuck = 0` in `SCCTRemaster.ini` removes the menu entry.
+
+## Mods
+
+The remaster adds mod support to single-player and co-op, which never had any. It's being built in phases; the
+**Mods folder**, **Lua scripting**, **texture packs**, **level changes** and the start of an **in-game level editor** are in:
+
+- Every folder in `Mods\` (next to `System\` and `Data\`) is a mod. Its `System\` and `Data\` folders mirror the
+  game's: a file with the same path as a game file replaces it, and a new file is added as if it had shipped with
+  the game. The game's own files are never changed.
+- An optional `mod.ini` gives the mod's name, author, version, on/off switch and priority (when two mods replace
+  the same file, the higher priority wins).
+- **Lua scripting:** Lua 5.4 scripts in a mod's `Scripts\` folder react to the game (a level starting, every frame,
+  key presses, timers) and can read and change any UnrealScript property of any object (Sam, guards, the level) and
+  call its functions. Scripts are sandboxed: no file access, no running programs. `Mods\SCRIPTING.txt` documents
+  the API; the level editor reloads scripts while playing.
+- **Texture packs:** the level editor dumps every texture the game loads (named with the game's own texture names where
+  possible), and any image in a mod's `Textures\` folder replaces the texture with the same fingerprint, at any
+  resolution: PNG, TGA, JPG and BMP (compressed to DXT with mipmaps automatically) or DDS. `Mods\TEXTURES.txt`
+  explains it.
+- **Level changes:** a text file per map in a mod's `Levels\` folder adds actors, changes the ones in the map (any
+  property, in UnrealEd's text syntax) or removes them, every time the mission starts. The level editor lists every actor of
+  the current level so you know their names. `Mods\LEVELS.txt` explains it.
+- **Level editor (in progress):** press `~` in a level to open it. The world freezes and a free camera flies through it
+  (right mouse + WASD). Click an actor to select it, drag it to move it, duplicate it (guards too) or delete it (with
+  the gun and gear it carries); the Actors tab lists every actor, the Inspector shows and edits any property in
+  UnrealEd's text syntax, and the Tools tab has the camera, grid snapping, actor names, freezing the world, the UI size
+  and the mod tools. **Ctrl+S saves** the edits as a level file (`Mods\<folder>\Levels\<map>.txt`), merged into what
+  that file already did, so a level can be built up over several sessions.
+- `Mods\README.txt` explains the rest, and `Mods\_Example` is a template to copy.
+
+Coming next for the editor: walls and rooms, then placing guards, patrols, lights and triggers from a palette.
 
 ## Install
 
@@ -151,6 +190,9 @@ reverse-engineering notes are in the comments at the top of each `src/*.cpp` fil
 - Widescreen logic and several patterns: **ThirteenAG**,
   [WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) (MIT).
 - Hooking: [MinHook](https://github.com/TsudaKageyu/minhook) by Tsuda Kageyu (BSD-2-Clause).
+- Scripting: [Lua](https://www.lua.org) by Lua.org, PUC-Rio (MIT).
+- Texture packs: [stb](https://github.com/nothings/stb) image libraries by Sean Barrett (MIT / public domain).
+- Level editor: [Dear ImGui](https://github.com/ocornut/imgui) by Omar Cornut (MIT).
 - Bundled: [DXVK](https://github.com/doitsujin/dxvk) by Philip Rebohle and contributors (zlib).
 - Bundled: [DSOAL](https://github.com/kcat/dsoal) and [OpenAL Soft](https://github.com/kcat/openal-soft)
   (LGPL), [Xidi](https://github.com/samuelgr/Xidi) by Samuel Grossman (BSD-3-Clause).

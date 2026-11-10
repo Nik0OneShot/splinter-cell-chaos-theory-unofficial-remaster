@@ -1,0 +1,128 @@
+SPLINTER CELL CHAOS THEORY - UNOFFICIAL REMASTER: LUA SCRIPTING
+================================================================
+
+Mods can run Lua 5.4 scripts. Put them in the mod's Scripts folder:
+
+    Mods\MyMod\Scripts\main.lua
+
+Every .lua file directly in Scripts\ runs when the game starts, in alphabetical
+order. Files in subfolders only run when a script loads them with require.
+Each mod has its own global variables; the 'shared' table is visible to all
+mods. Mods load in the same order as their files (lowest Priority first).
+
+Output goes to System\SCCTRemaster.log as [LUA] lines, errors included (with
+the file and line). The level editor (~ key) has a Reload Lua scripts button in
+its Tools tab (the "level" event then fires again). [Mods] Scripts = 0 in System\SCCTRemaster.ini turns
+scripting off.
+
+
+EVENTS
+------
+on("map", function(name, options) ... end)
+    A map starts loading (a mission, a savegame or the menu). The level isn't
+    there yet.
+on("level", function(name) ... end)
+    The level is ready and Sam exists. Fires after every map load, savegame
+    load and script reload. 'name' is the map, e.g. "01_Lighthouse" or "menu".
+on("tick", function(dt) ... end)
+    Every frame while playing (not while paused or in menus). dt = seconds.
+
+A handler that fails 10 times in a row is switched off. A handler that runs for more
+than a second (an endless loop) is stopped with an error.
+
+
+TIMERS
+------
+after(seconds, fn)       run fn once, later
+every(seconds, fn)       run fn again and again
+cancel(timer)            stop a timer from after/every/run
+run(fn)                  run fn as a coroutine, where wait(seconds) pauses it:
+                             run(function()
+                                 print("3"); wait(1); print("2"); wait(1); print("1")
+                             end)
+Timers use game time: they don't run while the game is paused or in menus.
+
+
+THE GAME
+--------
+player()                 Sam (nil when there's no level)
+level()                  the LevelInfo of the current level
+map()                    the current map's name
+time()                   seconds since the level started (Level.TimeSeconds)
+actors(class)            a list of the level's actors of that class (a class
+                         name like "EPawn", or a class object); actors() = all
+objects(class)           every object of that class, actors or not
+class(name)              the class object with that name, or nil
+actor(name)              the level's actor with that object name (see the level
+                         editor's Actors tab), or nil
+
+
+OBJECTS
+-------
+Game objects (actors, the level, classes, ...) work like Lua tables whose
+fields are the object's UnrealScript properties, by their UnrealScript names:
+
+    local sam = player()
+    print(sam.Health)                 -- read a property
+    sam.Health = 50                   -- write one
+    print(sam.Location)               -- vectors come back as vec values
+    sam.Health = sam.InitialHealth    -- heal Sam
+
+and whose methods are the object's UnrealScript functions (use ':'):
+
+    sam:SetLocation(sam.Location + vec(0, 0, 300))   -- 3 metres up
+    local x, y, z = sam:GetAxes(sam.Rotation)        -- out parameters come back as extra results
+
+Types: int, byte and float properties are numbers; bool is true/false; name
+and string properties are strings; objects and classes are objects (or nil);
+structs are tables of their fields (Rotator = { Pitch, Yaw, Roll }); static
+arrays are lists; dynamic arrays are lists you can read but not write yet.
+Writing an object property checks the object's class, so you can't put a
+light where the game expects a pawn.
+
+valid(obj)               false once the object has been destroyed (using a
+                         destroyed object is an error, never a crash)
+isa(obj, class)          true if obj is of that class or a subclass
+nameof(obj)              its object name, e.g. "EPawn12"
+classof(obj)             its class object
+fullname(obj)            e.g. "EPawn 01_Lighthouse.EPawn12" (also tostring)
+importtext(obj, property, text [, index])
+                         sets a property from Unreal text syntax, e.g.
+                         importtext(a, "StaticMesh", "StaticMesh'Pkg.Name'")
+copyprops(dst, src)      copies the designer-set properties of src to dst (same
+                         class): what Copy= does in level changes
+dump(obj [, filter])     logs every property (with its value) and function
+                         of the object; filter limits it to names containing
+                         that text, e.g. dump(player(), "health")
+
+To find out what to change, dump() an object and read the log.
+
+
+VECTORS
+-------
+vec(x, y, z) makes a vector. Vectors support + - * / and have :len(),
+:dist(other), :dot(other) and :normal(). 1 metre is about 100 units.
+
+
+INPUT
+-----
+key(name)                true while the key is held
+pressed(name)            true only in the frame the key went down
+Key names: "A".."Z", "0".."9", "F1".."F24", "Num0".."Num9", "NumPlus",
+"NumMinus", "NumStar", "NumSlash", "NumDot", "Space", "Enter", "Escape", "Tab",
+"Shift", "Ctrl", "Alt", "Backspace", "Up", "Down", "Left", "Right", "Insert",
+"Delete", "Home", "End", "PageUp", "PageDown", "Mouse1".."Mouse5".
+Keys only count while the game window is in front.
+
+
+ALSO AVAILABLE
+--------------
+print(...)               writes a [LUA] line to the log
+require("name")          runs Scripts\name.lua of the same mod once and
+                         returns its result ("folder.name" = Scripts\folder\name.lua)
+shared                   a table every mod can read and write
+string, table, math, utf8, coroutine, os.clock/time/date, pairs, ipairs,
+pcall, error, tostring, tonumber, setmetatable, ... (standard Lua)
+
+For safety, scripts can't open files, run programs or load compiled Lua: there
+is no io library, no os.execute, no debug library and no dofile/loadfile.
