@@ -1,0 +1,9 @@
+/build/
+/dist/
+/game/
+*.log
+SCCTRemaster_capture_*.txt
+# Local only: other mods used as references, developer tests and notes.
+/references/
+/tests/
+/docs/
